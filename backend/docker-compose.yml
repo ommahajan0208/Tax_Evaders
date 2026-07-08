@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sebi_backend
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - .:/app
+      - uploads_data:/app/uploads
+      - vectorstore_data:/app/vectorstore
+    env_file:
+      - .env
+    environment:
+      - ENV=development
+    restart: always
+
+volumes:
+  uploads_data:
+  vectorstore_data:

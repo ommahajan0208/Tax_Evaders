@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    
+    --card: 222 47% 7%;
+    --card-foreground: 213 31% 91%;
+    
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    
+    --secondary: 171 66% 44%;
+    --secondary-foreground: 222 47% 11%;
+    
+    --muted: 217 32% 12%;
+    --muted-foreground: 215 20% 65%;
+    
+    --accent: 217 32% 15%;
+    --accent-foreground: 213 31% 91%;
+    
+    --destructive: 346 84% 50%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 217 32% 14%;
+    --input: 217 32% 14%;
+    --ring: 224 76% 48%;
+    
+    --radius: 0.75rem;
+  }
+}
+
+@layer utilities {
+  .glassmorphism {
+    background: rgba(15, 22, 42, 0.65);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  
+  .glassmorphism-light {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 22, 42, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Custom transitions and styling overrides */
+body {
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.011em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+}
