@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { 
-  CheckCircle2, 
-  AlertCircle, 
-  Clock, 
-  HelpCircle,
-  FileText,
-  Upload,
-  Calendar,
-  X,
-  Sparkles,
-  ShieldCheck,
-  ClipboardList
+import { Link } from 'react-router-dom'
+import {
+  CheckCircle2, AlertCircle, Clock, HelpCircle, FileText, Upload,
+  Calendar, X, Sparkles, ShieldCheck, ClipboardList,
+  BarChart2, FileSearch, ClipboardCheck, TrendingUp, TrendingDown,
+  ChevronRight, AlertTriangle
 } from 'lucide-react'
 import api from '../utils/api'
 
@@ -48,6 +42,9 @@ export const DashboardPage: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [activeDept, setActiveDept] = useState<string>('All')
+  const [riskSummary, setRiskSummary] = useState<any>(null)
+  const [recentCirculars, setRecentCirculars] = useState<any[]>([])
+  const [checklistSummary, setChecklistSummary] = useState<{ total: number; completed: number; totalItems: number; completedItems: number }>({ total: 0, completed: 0, totalItems: 0, completedItems: 0 })
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   
   // Verification upload state
@@ -62,10 +59,35 @@ export const DashboardPage: React.FC = () => {
       const deptFilter = activeDept === 'All' ? '' : `?department=${activeDept}`
       const tasksRes = await api.get<Task[]>(`/compliance/tasks${deptFilter}`)
       setTasks(tasksRes.data)
-      
+
       // Get audit logs
       const auditRes = await api.get<AuditLog[]>('/compliance/audit')
       setAuditLogs(auditRes.data)
+
+      // New: risk summary
+      try {
+        const riskRes = await api.get('/risk/summary')
+        setRiskSummary(riskRes.data)
+      } catch {}
+
+      // New: recent circulars
+      try {
+        const circRes = await api.get('/circulars/recent?limit=5')
+        setRecentCirculars(circRes.data)
+      } catch {}
+
+      // New: checklist overview
+      try {
+        const clRes = await api.get('/checklists/')
+        const cls = clRes.data as any[]
+        setChecklistSummary({
+          total: cls.length,
+          completed: cls.filter((c: any) => c.total_items > 0 && c.completed_items === c.total_items).length,
+          totalItems: cls.reduce((a: number, c: any) => a + c.total_items, 0),
+          completedItems: cls.reduce((a: number, c: any) => a + c.completed_items, 0),
+        })
+      } catch {}
+
     } catch (e) {
       console.error("Error loading dashboard data:", e)
     }
@@ -138,8 +160,8 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       
-      {/* 1. Quick Stats Header Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      {/* 1. Quick Stats Header Cards — extended */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glassmorphism rounded-2xl p-5 shadow-lg border border-slate-800">
           <div className="flex justify-between items-center text-slate-400 text-xs font-semibold uppercase tracking-wider">
             <span>Total Tasks</span>
@@ -167,6 +189,106 @@ export const DashboardPage: React.FC = () => {
             <AlertCircle className="w-5 h-5 text-rose-400" />
           </div>
           <p className="text-3xl font-extrabold text-rose-400 mt-3">{alertCount}</p>
+        </div>
+      </div>
+
+      {/* 2. Smart Insights Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Compliance Rate */}
+        <div className="glassmorphism rounded-2xl p-5 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <ClipboardCheck className="w-4 h-4 text-emerald-400" /> Checklist Progress
+            </h3>
+            <Link to="/checklists" className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5">
+              View all <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {checklistSummary.totalItems > 0 ? (
+            <>
+              <div className="flex items-end gap-2">
+                <p className="text-3xl font-extrabold text-slate-100">
+                  {Math.round(checklistSummary.completedItems / checklistSummary.totalItems * 100)}%
+                </p>
+                <p className="text-xs text-slate-400 mb-1">
+                  {checklistSummary.completedItems}/{checklistSummary.totalItems} items done
+                </p>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
+                  style={{ width: `${Math.round(checklistSummary.completedItems / checklistSummary.totalItems * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-500">{checklistSummary.total} checklists · {checklistSummary.completed} fully complete</p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No checklists yet. Upload a circular to auto-generate.</p>
+          )}
+        </div>
+
+        {/* Risk Summary */}
+        <div className="glassmorphism rounded-2xl p-5 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-orange-400" /> Risk Summary
+            </h3>
+            <Link to="/risk" className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5">
+              View all <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {riskSummary ? (
+            <>
+              <div className="flex items-end gap-2">
+                <p className="text-3xl font-extrabold text-slate-100">{riskSummary.total_findings}</p>
+                <p className="text-xs text-slate-400 mb-1">total findings</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-2">
+                  <p className="text-lg font-extrabold text-rose-400">{riskSummary.high_risk}</p>
+                  <p className="text-[9px] text-slate-500">High Risk</p>
+                </div>
+                <div className="text-center bg-amber-500/10 border border-amber-500/20 rounded-xl p-2">
+                  <p className="text-lg font-extrabold text-amber-400">{riskSummary.open}</p>
+                  <p className="text-[9px] text-slate-500">Open</p>
+                </div>
+                <div className="text-center bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2">
+                  <p className="text-lg font-extrabold text-emerald-400">{riskSummary.mitigated}</p>
+                  <p className="text-[9px] text-slate-500">Mitigated</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500">Avg score: {riskSummary.average_score}/25</p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">No risk data yet. Upload a circular to auto-analyze risks.</p>
+          )}
+        </div>
+
+        {/* Recent Circulars */}
+        <div className="glassmorphism rounded-2xl p-5 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <FileSearch className="w-4 h-4 text-blue-400" /> Recent Circulars
+            </h3>
+            <Link to="/circulars" className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5">
+              View all <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {recentCirculars.length === 0 ? (
+            <p className="text-sm text-slate-500">No circulars indexed. Upload SEBI PDF documents.</p>
+          ) : (
+            <div className="space-y-2">
+              {recentCirculars.slice(0, 4).map((c: any) => (
+                <Link key={c.id} to="/circulars" className="flex items-center gap-2 hover:bg-slate-800/30 rounded-lg p-1.5 -mx-1.5 transition group">
+                  <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span className="text-xs text-slate-300 line-clamp-1 flex-1 group-hover:text-slate-100 transition">{c.title}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${c.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
+                    {c.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

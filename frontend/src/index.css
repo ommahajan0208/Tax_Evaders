@@ -80,3 +80,61 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Outfit', sans-serif;
 }
+
+/* ========================================================
+   Agentic Compliance OS — Extended Utilities
+   ======================================================== */
+
+/* Risk Heatmap Cell Pulse (for high-risk cells) */
+@keyframes risk-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.risk-critical {
+  background: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  animation: risk-pulse 2s ease-in-out infinite;
+}
+.risk-high {
+  background: rgba(249, 115, 22, 0.25);
+  color: #fb923c;
+}
+.risk-medium {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fbbf24;
+}
+.risk-low {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.375rem;
+  border-width: 1px;
+}
+.status-badge-open     { @apply bg-amber-500/10 text-amber-400 border-amber-500/20; }
+.status-badge-complete { @apply bg-emerald-500/10 text-emerald-400 border-emerald-500/20; }
+.status-badge-overdue  { @apply bg-rose-500/10 text-rose-400 border-rose-500/20; }
+
+/* Notification unread indicator pulse */
+@keyframes notif-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+.notif-badge-pulse {
+  animation: notif-pulse 2s ease-in-out infinite;
+}
+
+/* Checklist item transition */
+.checklist-item-transition {
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}

@@ -142,6 +142,51 @@ async def verify_task_evidence(
     }
 
 
+@router.get("/audit/verify")
+async def verify_audit_chain(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Cryptographically verify the entire audit log chain.
+    Iterates sequentially checking that each row's hash matches the SHA-256 of
+    (prev_hash + JSON(row fields)). Returns detail of any mismatch.
+    """
+    result = await db.execute(select(AuditLog).order_by(AuditLog.id.asc()))
+    logs = result.scalars().all()
+
+    is_valid = True
+    mismatches = []
+    total_records = len(logs)
+
+    prev_hash = ""
+    for log in logs:
+        # Skip seed or legacy logs that don't have a hash generated
+        if not log.hash and not log.prev_hash:
+            prev_hash = ""
+            continue
+
+        computed = log.compute_hash(prev_hash)
+        if log.hash != computed:
+            is_valid = False
+            mismatches.append({
+                "id": log.id,
+                "action_type": log.action_type,
+                "user_name": log.user_name,
+                "timestamp": str(log.timestamp),
+                "stored_hash": log.hash,
+                "computed_hash": computed,
+            })
+        prev_hash = log.hash or ""
+
+    return {
+        "is_chain_valid": is_valid,
+        "total_records_checked": total_records,
+        "mismatch_count": len(mismatches),
+        "mismatches": mismatches,
+    }
+
+
 @router.get("/audit", response_model=List[AuditLogResponse])
 async def list_audit_logs(
     db: AsyncSession = Depends(get_db),

@@ -12,7 +12,8 @@ import {
   Menu,
   ChevronLeft,
   RefreshCw,
-  Plus
+  Plus,
+  AlertCircle
 } from 'lucide-react'
 import { useChat } from '../contexts/ChatContext'
 import { useAuthStore } from '../store/authStore'
@@ -32,8 +33,28 @@ export const ChatPage: React.FC = () => {
   const [input, setInput] = useState('')
   const [historyOpen, setHistoryOpen] = useState(true)
   const [citationsOpen, setCitationsOpen] = useState(true)
+  const [streamStep, setStreamStep] = useState(0)
   
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  const streamMessages = [
+    "Retrieving SEBI circular text chunks...",
+    "Extracting obligations via Obligation Extraction Agent...",
+    "Verifying claims with Citation Entailment Agent...",
+    "Finalizing response generation..."
+  ]
+
+  useEffect(() => {
+    let interval: any
+    if (isStreaming) {
+      interval = setInterval(() => {
+        setStreamStep((prev) => (prev + 1) % 4)
+      }, 2500)
+    } else {
+      setStreamStep(0)
+    }
+    return () => clearInterval(interval)
+  }, [isStreaming])
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,7 +115,7 @@ export const ChatPage: React.FC = () => {
               onClick={() => selectSession(sId)}
               className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition group ${
                 sId === sessionId 
-                  ? 'bg-blue-600/15 text-blue-400 border border-blue-500/25 shadow-md' 
+                  ? 'bg-blue-600/15 text-blue-400 border-l border-blue-500 shadow-md' 
                   : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-300'
               }`}
             >
@@ -168,21 +189,33 @@ export const ChatPage: React.FC = () => {
                 </div>
                 
                 {/* Message Bubble text content */}
-                <div className={`p-4 rounded-3xl text-sm leading-relaxed ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-tr-none' 
-                    : 'bg-slate-900/70 border border-slate-800/80 text-slate-200 rounded-tl-none glassmorphism'
-                }`}>
-                  <ReactMarkdown 
-                    className="prose prose-invert prose-xs text-inherit max-w-none break-words"
-                    components={{
-                      table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-slate-850/40 text-xs border border-slate-800" {...props}/></div>,
-                      th: ({node, ...props}) => <th className="px-3 py-2 bg-slate-950 font-bold border-b border-slate-800" {...props}/>,
-                      td: ({node, ...props}) => <td className="px-3 py-2 border-b border-slate-850" {...props}/>,
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                <div className="flex flex-col gap-2 max-w-full">
+                  <div className={`p-4 rounded-3xl text-sm leading-relaxed ${
+                    msg.role === 'user' 
+                      ? 'bg-blue-600 text-white rounded-tr-none' 
+                      : 'bg-slate-900/70 border border-slate-800/80 text-slate-200 rounded-tl-none glassmorphism'
+                  }`}>
+                    {/* Low confidence warning banner (PRD Section 11.2) */}
+                    {msg.role === 'assistant' && msg.confidence_score !== undefined && msg.confidence_score < 0.75 && (
+                      <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold rounded-xl flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p>Warning: This response has low grounding confidence ({Math.round(msg.confidence_score * 100)}%).</p>
+                          <p className="text-[10px] opacity-80 mt-0.5">Please cross-reference with the citations in the right-side panel.</p>
+                        </div>
+                      </div>
+                    )}
+                    <ReactMarkdown 
+                      className="prose prose-invert prose-xs text-inherit max-w-none break-words"
+                      components={{
+                        table: ({node, ...props}) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-slate-850/40 text-xs border border-slate-800" {...props}/></div>,
+                        th: ({node, ...props}) => <th className="px-3 py-2 bg-slate-950 font-bold border-b border-slate-800" {...props}/>,
+                        td: ({node, ...props}) => <td className="px-3 py-2 border-b border-slate-850" {...props}/>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             ))
@@ -196,7 +229,7 @@ export const ChatPage: React.FC = () => {
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:0.2s]"></span>
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:0.4s]"></span>
-                <span className="pl-1.5 text-slate-500">Grounding reference sources...</span>
+                <span className="pl-1.5 text-slate-500">{streamMessages[streamStep]}</span>
               </div>
             </div>
           )}

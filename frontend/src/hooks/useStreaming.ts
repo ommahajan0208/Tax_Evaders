@@ -13,6 +13,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   sources?: Source[]
+  confidence_score?: number
   created_at: string
 }
 
@@ -121,6 +122,15 @@ export const useStreaming = (sessionId: string) => {
                   prev.map((msg) =>
                     msg.id === assistantMsgId
                       ? { ...msg, content: accumulatedContent }
+                      : msg
+                  )
+                )
+              } else if (currentEvent === 'confidence') {
+                // Update assistant message with confidence score and the final verified text (with [UNVERIFIED] flags if any)
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMsgId
+                      ? { ...msg, confidence_score: data.confidence_score, content: data.verified_answer }
                       : msg
                   )
                 )

@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from datetime import datetime, date, timedelta
 from typing import List
 from app.database import get_db, SessionLocal
-from app.models import DocumentMetadata, RegulatoryRule, ComplianceTask, AuditLog
+from app.models import DocumentMetadata, RegulatoryRule, ComplianceTask, AuditLog, Circular
 from app.schemas import DocumentResponse
 from app.config import settings
 from app.dependencies import get_current_user
@@ -126,11 +126,46 @@ async def process_document_background(doc_id: int, file_path: str, filename: str
             )
             db.add(audit_log)
             
+            # Create / update Circular record linked to this document
+            circ_check = await db.execute(select(Circular).where(Circular.document_id == doc_id))
+            circular = circ_check.scalars().first()
+            if not circular:
+                import hashlib
+                file_hash = hashlib.sha256(full_text[:10000].encode()).hexdigest()[:64]
+                circular = Circular(
+                    document_id=doc_id,
+                    title=filename.replace(".pdf", "").replace("_", " ").title(),
+                    doc_type="circular",
+                    file_hash=file_hash,
+                    status="active",
+                )
+                db.add(circular)
+                await db.flush()
+
             # Mark indexing done
             doc.status = "indexed"
             doc.indexed_at = datetime.utcnow()
             await db.commit()
-            
+
+            # ---- Run full Agentic Orchestration Pipeline ----
+            try:
+                from app.agents.orchestrator import run_ingestion_pipeline
+                pipeline_result = await run_ingestion_pipeline(
+                    db,
+                    circular_id=circular.id,
+                    circular_name=circular.title,
+                    document_text=full_text,
+                    entity_type="broker",
+                )
+                print(
+                    f"Orchestrator pipeline complete: "
+                    f"{len(pipeline_result.get('obligations', []))} obligations, "
+                    f"checklist={pipeline_result.get('checklist_id')}, "
+                    f"{len(pipeline_result.get('risk_findings', []))} risk findings."
+                )
+            except Exception as oe:
+                print(f"Orchestrator pipeline error (non-fatal): {oe}")
+
         except Exception as e:
             # Rollback and save failure reason
             await db.rollback()

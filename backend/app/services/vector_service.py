@@ -146,5 +146,9 @@ class VectorStoreManager:
         """Resets the vector index and metadata maps completely."""
         self._init_empty_index()
 
+    def get_chunks_for_document(self, filename: str) -> List[Dict[str, Any]]:
+        """Return all stored metadata chunks for a given filename."""
+        return [m for m in self.metadata if m.get("filename") == filename]
+
 # Global manager instance
 vector_manager = VectorStoreManager()

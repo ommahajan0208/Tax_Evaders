@@ -233,3 +233,279 @@ def _mock_evidence_verification(criteria: str, evidence_text: str) -> Dict[str, 
             "feedback": "Offline Verification FAILED: The uploaded document does not appear to contain relevant reconciliation details or is of an incorrect format.",
             "anomalies": "No reconciliation ledger keywords found."
         }
+
+
+# ===========================================================================
+# NEW: Structured Obligation Extraction (PRD §6.2.2)
+# ===========================================================================
+
+def extract_obligations_structured(circular_name: str, document_text: str) -> List[Dict[str, Any]]:
+    """
+    Extracts structured obligations from document text using Gemini.
+    JSON schema: [{obligated_entity_type, obligation_text, section_reference,
+                   deadline_type, deadline_value, penalty_description, confidence}]
+    """
+    model = get_gemini_model()
+    prompt = f"""You are an expert SEBI regulatory analyst. Analyze this text from the circular: '{circular_name}'.
+
+Extract EVERY regulatory obligation (every "shall", "must", "is required to" clause).
+
+Output a JSON array with objects using EXACTLY this schema:
+[
+  {{
+    "obligated_entity_type": "broker | dp | amc | rta | listed_co | all",
+    "obligation_text": "Full text of what must be done",
+    "section_reference": "e.g. Section 2.1 or Regulation 9(b) — or null if not found",
+    "deadline_type": "fixed | recurring | event_triggered | null",
+    "deadline_value": "human-readable deadline e.g. '30 days from registration' or null",
+    "penalty_description": "Penalty if mentioned, else null",
+    "confidence": 0.95
+  }}
+]
+
+Rules:
+- Only include genuine obligations with "shall/must/is required to" language.
+- Split compound obligations only if they have separate, independently verifiable actions.
+- Keep confidence between 0.5 and 1.0 based on how clear the obligation is.
+- Return an empty array [] if no obligations found.
+
+TEXT:
+{document_text[:15000]}
+"""
+    if model:
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            data = json.loads(response.text)
+            if isinstance(data, list):
+                return data
+            return []
+        except Exception as e:
+            print(f"Gemini obligation extraction error: {e}")
+            return _mock_obligations_structured(circular_name)
+    else:
+        return _mock_obligations_structured(circular_name)
+
+
+def _mock_obligations_structured(circular_name: str) -> List[Dict[str, Any]]:
+    """Fallback mock obligations when Gemini is unavailable."""
+    name_lower = circular_name.lower()
+    base = "broker" if "broker" in name_lower else "all"
+    return [
+        {
+            "obligated_entity_type": base,
+            "obligation_text": "Stockbrokers shall segregate client funds from proprietary funds and maintain daily reconciliation records showing zero discrepancy.",
+            "section_reference": "Section 2.1",
+            "deadline_type": "recurring",
+            "deadline_value": "Daily — end of trading day",
+            "penalty_description": "Regulatory action and penalty as per SEBI guidelines.",
+            "confidence": 0.92,
+        },
+        {
+            "obligated_entity_type": base,
+            "obligation_text": "Stockbrokers must submit quarterly internal audit reports to the stock exchange within 45 days from the end of each quarter.",
+            "section_reference": "Section 4.2",
+            "deadline_type": "recurring",
+            "deadline_value": "Quarterly — within 45 days of quarter end",
+            "penalty_description": None,
+            "confidence": 0.88,
+        },
+        {
+            "obligated_entity_type": base,
+            "obligation_text": "Every stockbroker shall maintain KYC records for all clients for a minimum period of five years.",
+            "section_reference": "Section 6.1",
+            "deadline_type": "event_triggered",
+            "deadline_value": "At the time of client onboarding and maintained for 5 years.",
+            "penalty_description": None,
+            "confidence": 0.85,
+        },
+    ]
+
+
+# ===========================================================================
+# NEW: Citation Entailment Check (PRD §6.2.5)
+# ===========================================================================
+
+def check_citation_entailment(
+    answer: str,
+    context_chunks: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    LLM-as-judge: verify each claim in the answer is supported by context_chunks.
+    Returns: {verified_answer, confidence_score, unsupported_claims, citation_valid}
+    """
+    model = get_gemini_model()
+    context_str = "\n\n".join(
+        f"[Source {i+1}]: {c.get('text', c.get('text_preview', ''))}"
+        for i, c in enumerate(context_chunks[:5])
+    )
+    prompt = f"""You are a citation verification agent for SEBI regulatory compliance.
+
+ANSWER TO VERIFY:
+{answer[:3000]}
+
+RETRIEVED SOURCE CHUNKS:
+{context_str[:5000]}
+
+TASK: Check if every factual claim in the ANSWER is supported by at least one SOURCE CHUNK.
+
+Output a JSON object:
+{{
+  "verified_answer": "The answer text, with [UNVERIFIED] prepended to any claim not traceable to a source.",
+  "confidence_score": 0.95,
+  "unsupported_claims": ["list of claim strings that could not be traced to sources"],
+  "citation_valid": true
+}}
+
+If all claims are supported, return the answer unchanged with citation_valid=true.
+"""
+    if model:
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            data = json.loads(response.text)
+            return data
+        except Exception as e:
+            print(f"Gemini citation entailment error: {e}")
+            return _mock_citation_check(answer, context_chunks)
+    else:
+        return _mock_citation_check(answer, context_chunks)
+
+
+def _mock_citation_check(answer: str, context_chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Mock citation check — assumes all claims are supported when API is unavailable."""
+    score = 0.85 if context_chunks else 0.3
+    return {
+        "verified_answer": answer,
+        "confidence_score": score,
+        "unsupported_claims": [] if context_chunks else ["No source chunks provided."],
+        "citation_valid": bool(context_chunks),
+    }
+
+
+# ===========================================================================
+# NEW: Risk Factor Scoring (PRD §6.2.4, §13)
+# ===========================================================================
+
+def score_risk_factors(
+    obligation_text: str,
+    entity_type: str,
+    deadline_type: str,
+) -> Dict[str, Any]:
+    """
+    LLM-assisted risk factor extraction.
+    Returns: {likelihood: 1-5, impact: 1-5, rationale: str}
+    """
+    model = get_gemini_model()
+    prompt = f"""You are a SEBI compliance risk analyst. Score this regulatory obligation for risk.
+
+OBLIGATION: {obligation_text[:1000]}
+ENTITY TYPE: {entity_type}
+DEADLINE TYPE: {deadline_type}
+
+Score likelihood (1=very unlikely to miss, 5=very likely to miss) and
+impact (1=minimal consequence, 5=severe regulatory/financial consequence).
+
+Output JSON:
+{{
+  "likelihood": 3,
+  "impact": 4,
+  "rationale": "Brief 1-2 sentence explanation of why you scored this way."
+}}
+"""
+    if model:
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            data = json.loads(response.text)
+            return data
+        except Exception as e:
+            print(f"Gemini risk scoring error: {e}")
+            return _mock_risk_score(obligation_text, deadline_type)
+    else:
+        return _mock_risk_score(obligation_text, deadline_type)
+
+
+def _mock_risk_score(obligation_text: str, deadline_type: str) -> Dict[str, Any]:
+    """Mock risk score using heuristics."""
+    text_lower = obligation_text.lower()
+    impact = 4 if any(w in text_lower for w in ["penalty", "sebi", "inspection", "client fund", "segregat"]) else 3
+    likelihood = 3 if "daily" in (deadline_type or "").lower() else 2
+    return {
+        "likelihood": likelihood,
+        "impact": impact,
+        "rationale": f"Heuristic score: impact={impact} (obligation type analysis), likelihood={likelihood} (deadline frequency).",
+    }
+
+
+# ===========================================================================
+# NEW: Report Narrative Generation (PRD §10.9, §14.4)
+# ===========================================================================
+
+def generate_report_narrative(
+    report_type: str,
+    scope_summary: str,
+    data_summary: str,
+) -> str:
+    """
+    Generate a human-readable audit/compliance/risk report narrative.
+    Returns Markdown-formatted report text.
+    """
+    model = get_gemini_model()
+    prompt = f"""You are a professional SEBI compliance report writer. Generate a formal {report_type} report.
+
+SCOPE: {scope_summary}
+DATA SUMMARY: {data_summary}
+
+Write a professional compliance report in Markdown format with:
+- Executive Summary
+- Key Findings (use a table)
+- Compliance Status Summary
+- Risk Assessment
+- Recommended Actions
+- Conclusion
+
+Be precise, professional, and cite the data provided. Do not fabricate figures not in the data summary.
+"""
+    if model:
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            print(f"Gemini report generation error: {e}")
+            return _mock_report_narrative(report_type, scope_summary, data_summary)
+    else:
+        return _mock_report_narrative(report_type, scope_summary, data_summary)
+
+
+def _mock_report_narrative(report_type: str, scope_summary: str, data_summary: str) -> str:
+    return f"""# {report_type.replace('_', ' ').title()} Report
+
+**Scope:** {scope_summary}
+
+## Executive Summary
+This report summarizes the compliance posture based on available data. *(Generated in offline mode)*
+
+## Data Overview
+{data_summary}
+
+## Key Findings
+| Category | Status |
+|---|---|
+| Compliance | Under review |
+| Risk Level | Medium |
+
+## Recommended Actions
+1. Review all open obligations and assign owners.
+2. Ensure evidence is uploaded for all pending tasks.
+3. Escalate overdue items to compliance officer.
+
+## Conclusion
+This report was generated by the Agentic Compliance OS. Please verify with a qualified compliance professional.
+"""

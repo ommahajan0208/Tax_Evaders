@@ -10,6 +10,7 @@ from app.schemas import ChatQuery, ChatMessageResponse, SourceCitation
 from app.dependencies import get_current_user
 from app.services.vector_service import vector_manager
 from app.services.gemini import generate_chat_response_stream
+from app.agents.citation_agent import run_citation_check
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -28,9 +29,6 @@ async def submit_chat_query(
     # Map vector search results to SourceCitations
     sources = []
     for c in chunks:
-        # Generate a confidence metric derived from FAISS cosine similarity score
-        # Since flat index Inner Product on normalized vectors is between -1 and 1
-        # typically positive for matches, we bind it between 0.0 and 1.0
         confidence = max(0.0, min(1.0, c["score"]))
         sources.append({
             "file": c["filename"],
@@ -59,6 +57,14 @@ async def submit_chat_query(
         for token in generate_chat_response_stream(question, sources, history_data):
             full_response += token
             yield f"event: token\ndata: {json.dumps(token)}\n\n"
+
+        # Call Citation Agent to check entailment and score confidence
+        citation_res = run_citation_check(full_response, sources)
+        final_response = citation_res["verified_answer"]
+        conf_score = citation_res["confidence_score"]
+
+        # Stream confidence metrics and verified text update
+        yield f"event: confidence\ndata: {json.dumps({'confidence_score': conf_score, 'verified_answer': final_response})}\n\n"
             
         # Write user query and AI response to DB once streaming finishes successfully
         async with SessionLocal() as db_session:
@@ -71,8 +77,9 @@ async def submit_chat_query(
             ai_msg = ChatMessage(
                 user_id=current_user.id,
                 role="assistant",
-                content=full_response,
+                content=final_response,
                 sources=json.dumps(sources),
+                confidence_score=conf_score,
                 session_id=session_id
             )
             db_session.add(user_msg)
@@ -83,7 +90,7 @@ async def submit_chat_query(
                 task_id=None,
                 user_name=current_user.username,
                 action_type="Conversational Chat",
-                action_details=f"User asked: '{question[:50]}...'. Answer grounded with {len(sources)} citations."
+                action_details=f"User asked: '{question[:50]}...'. Answer grounded. Confidence score: {conf_score:.2f}"
             )
             db_session.add(log)
             await db_session.commit()
@@ -120,6 +127,7 @@ async def get_chat_history(
             role=msg.role,
             content=msg.content,
             sources=sources_list,
+            confidence_score=float(msg.confidence_score) if msg.confidence_score is not None else None,
             session_id=msg.session_id,
             created_at=msg.created_at
         ))
