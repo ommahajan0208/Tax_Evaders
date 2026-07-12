@@ -60,6 +60,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   useEffect(() => {
+    // Only fetch if user is authenticated (avoid 401 loops on /login)
+    const stored = localStorage.getItem('sebi-agent-auth-storage')
+    if (!stored) return
+    try {
+      const parsed = JSON.parse(stored)
+      if (!parsed?.state?.token) return
+    } catch {
+      return
+    }
     fetchSessions()
   }, [sessionId])
 

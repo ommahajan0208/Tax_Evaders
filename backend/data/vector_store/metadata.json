@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "text": "SEBI Stockbroker Circular Clause 2.1: Stockbrokers shall segregate client funds from broker funds and perform daily bank-ledger reconciliations. Discrepancies must be reported immediately.",
+    "filename": "stockbroker_circular.pdf",
+    "page_number": 2,
+    "chunk_index": 0,
+    "timestamp": 123456
+  },
+  {
+    "text": "SEBI Investment Adviser suitability Clause 5: IAs must construct a comprehensive suitability matrix and review client risk profiles annually. Records must be kept for 5 years.",
+    "filename": "ia_circular.pdf",
+    "page_number": 5,
+    "chunk_index": 0,
+    "timestamp": 123456
+  }
+]

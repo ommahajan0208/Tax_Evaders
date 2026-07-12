@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import api from '../utils/api'
 
 export interface Document {
@@ -33,7 +33,11 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(true)
     try {
       const res = await api.get('/documents/')
-      setDocuments(res.data)
+      const docs = res.data
+      setDocuments(docs)
+      hasProcessingRef.current = docs.some(
+        (doc: Document) => doc.status === 'pending' || doc.status === 'processing'
+      )
     } catch (e) {
       console.error('Could not fetch documents:', e)
     } finally {
@@ -89,21 +93,31 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }
 
+  // Track whether we have processing docs via a ref to avoid re-triggering the effect
+  const hasProcessingRef = useRef(false)
+
   useEffect(() => {
+    // Only fetch if user is likely authenticated (avoid 401 loops on /login)
+    const stored = localStorage.getItem('sebi-agent-auth-storage')
+    if (!stored) return
+
+    try {
+      const parsed = JSON.parse(stored)
+      if (!parsed?.state?.token) return
+    } catch {
+      return
+    }
+
     fetchDocuments()
-    
-    // Poll indexing status if any document is pending/processing
+
     const interval = setInterval(() => {
-      const hasProcessing = documents.some(
-        (doc) => doc.status === 'pending' || doc.status === 'processing'
-      )
-      if (hasProcessing) {
+      if (hasProcessingRef.current) {
         fetchDocuments()
       }
     }, 4000)
-    
+
     return () => clearInterval(interval)
-  }, [documents, fetchDocuments])
+  }, [fetchDocuments])
 
   return (
     <UploadContext.Provider

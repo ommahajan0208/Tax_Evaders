@@ -54,13 +54,17 @@ api.interceptors.response.use(
         } catch (refreshError) {
           // Refresh token is expired or invalid -> log out
           useAuthStore.getState().clearAuth()
-          window.location.href = '/login'
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
           return Promise.reject(refreshError)
         }
       } else {
         // No refresh token available -> logout
         useAuthStore.getState().clearAuth()
-        window.location.href = '/login'
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
       }
     }
     
